@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from httpx import head
+
 import requests 
 
 headers = {

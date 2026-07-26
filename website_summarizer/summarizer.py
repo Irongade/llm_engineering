@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from scrapper import WebScrapper
+from selenium_scrapper import SeleniumWebScrapper
 from IPython.display import Markdown, display
 from openai import OpenAI
 
@@ -65,3 +66,17 @@ def display_summary(url):
     display(Markdown(summary))
 
 display_summary(url)
+
+
+def selenium_summarize(url, wait):
+    ws = SeleniumWebScrapper(url, wait)
+    web_content = ws.fetch_website_contents()
+    response = openai.chat.completions.create(model="gpt-4.1-mini", messages= messages_for(web_content))
+    return response.choices[0].message.content
+
+
+def display_selenium_summary(url):
+    summary = selenium_summarize(url, 10)
+    display(Markdown(summary))
+
+display_selenium_summary("https://openai.com")
