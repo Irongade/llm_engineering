@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from scrapper import WebScrapper
 from selenium_scrapper import SeleniumWebScrapper
 from IPython.display import Markdown, display
-from openai import OpenAI
+from model import Model, Provider
 
 load_dotenv(override=True)
 api_key = os.getenv('OPENAI_API_KEY')
@@ -26,11 +26,9 @@ messages  = [{"role": "user", "content": message}]
 
 print(messages + "\n")
 
-openai = OpenAI()
-
-response = openai.chat.completions.create(model="gpt-5-nano", messages=messages)
-
-print(response.choices[0].message.content)
+openai = Model(model="gpt-5-nano")
+response = openai.chat(messages=messages)
+print(response)
 
 ws = WebScrapper(url)
 
@@ -58,8 +56,9 @@ def messages_for(web_content):
 def summarize(url):
     ws = WebScrapper(url)
     web_content = ws.fetch_website_contents()
-    response = openai.chat.completions.create(model="gpt-4.1-mini", messages= messages_for(web_content))
-    return response.choices[0].message.content
+    openai_model = Model(model="gpt-4.1-mini")
+    response = openai_model.chat(messages= messages_for(web_content))
+    return response
 
 def display_summary(url):
     summary = summarize(url)
@@ -71,8 +70,9 @@ display_summary(url)
 def selenium_summarize(url, wait):
     ws = SeleniumWebScrapper(url, wait)
     web_content = ws.fetch_website_contents()
-    response = openai.chat.completions.create(model="gpt-4.1-mini", messages= messages_for(web_content))
-    return response.choices[0].message.content
+    openai_model = Model(model="gpt-4.1-mini")
+    response = openai_model.chat(messages= messages_for(web_content))
+    return response
 
 
 def display_selenium_summary(url):
@@ -80,3 +80,12 @@ def display_selenium_summary(url):
     display(Markdown(summary))
 
 display_selenium_summary("https://openai.com")
+
+# FOR OPEN SOURCED MODELS
+
+gemini_model = Model(provider=Provider.GEMINI)
+print(gemini_model.chat(messages=[{"role": "user", "content": "Tell me a fun fact"}]))
+
+llama_model = Model(provider=Provider.OLLAMA)
+print(llama_model.chat(messages=[{"role": "user", "content": "Tell me a fun fact"}]))
+
