@@ -52,3 +52,5 @@ dependencies = [
     "xgboost>=3.1.1",
     "selenium>=4.46.0",
 ]
+[tool.setuptools]
+packages = ["website_summarizer", "brochure_generator", "tokenizer"]

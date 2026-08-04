@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import StaleElementReferenceException
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -10,7 +11,7 @@ USER_AGENT = (
 )
 
 class SeleniumWebScrapper:
-    def __init__(self, url: str, wait: int) -> None:
+    def __init__(self, url: str, wait = 10) -> None:
         self.url = url
         self.content = self.fetch_content(url, wait)
     
@@ -22,7 +23,7 @@ class SeleniumWebScrapper:
 
         return options
 
-    def fetch_content(self, url, wait) -> BeautifulSoup:
+    def fetch_content(self, url, wait = 10) -> BeautifulSoup:
         options = self.initialiseOptions()
 
         driver = webdriver.Chrome(options=options)
@@ -33,11 +34,22 @@ class SeleniumWebScrapper:
 
             self.title = driver.title or "No title found"
             self.text = driver.execute_script("return document.body.innerText") or ""
-            self.links = [
-                href
-                for a in driver.find_elements(By.TAG_NAME, "a")
-                if (href := a.get_attribute("href"))
-            ]
+
+            all_links = driver.find_elements(By.TAG_NAME, "a")
+            # hrefs = [link.get_attribute("href") for link in all_links]
+            # self.links = [
+            #     href
+            #     for href in hrefs if href
+            # ]
+            hrefs = []
+            for link in all_links:
+                try:
+                    href = link.get_attribute("href")
+                    if href:
+                        hrefs.append(href)
+                except StaleElementReferenceException:
+                    continue
+            self.links = hrefs
 
         finally:
             driver.quit()

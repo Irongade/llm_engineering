@@ -1,7 +1,13 @@
 from enum import Enum, StrEnum, auto
 from attr import dataclass
 from openai import OpenAI
-import os 
+from dotenv import load_dotenv
+import os
+
+from openai.types.chat.completion_create_params import ResponseFormat
+
+# load env variables
+load_dotenv(override=True) 
 
 class Provider(StrEnum):
     OPENAI = "openai"
@@ -14,6 +20,11 @@ class ProviderConfig:
     base_url: str | None
     api_key_env: str
     default_model: str
+
+@dataclass(frozen=True)
+class ChatOptions:
+    response_format: ResponseFormat | None
+    stream: bool
 
 CONFIGS: dict[Provider, ProviderConfig] = {
     Provider.OPENAI: ProviderConfig(
@@ -51,15 +62,29 @@ class Model:
             api_key=api_key
         )
 
-    def chat(self, messages: list[dict[str, str]]) -> str:
+    def chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=messages
+            messages=messages,
+            response_format=options.response_format,
+            stream=options.stream
         )
 
         normalised_response = self.normalise_response(response)
 
         return normalised_response or ""
+
+    def chat_stream(self, messages: list[dict[str, str]], options: ChatOptions | None):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            response_format=options.response_format,
+            stream=options.stream
+        )
+
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content or ""
 
     def normalise_response(self, response) -> str:
         match self.provider:
