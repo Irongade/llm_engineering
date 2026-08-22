@@ -1,9 +1,11 @@
 from enum import Enum, StrEnum, auto
+from typing import TypedDict
 from attr import dataclass
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.chat.completion_create_params import ResponseFormat
 
 # load env variables
@@ -22,10 +24,15 @@ class ProviderConfig:
     api_key_env: str
     default_model: str
 
+class Tool(TypedDict):
+    type: str
+    function: object
+
 @dataclass(frozen=True)
 class ChatOptions:
     response_format: ResponseFormat | None
     stream: bool
+    tools: list[Tool] | None
 
 CONFIGS: dict[Provider, ProviderConfig] = {
     Provider.OPENAI: ProviderConfig(
@@ -55,6 +62,14 @@ CONFIGS: dict[Provider, ProviderConfig] = {
     ),
 }
 
+BASE_OPTION = ChatOptions(stream=False, response_format=None, tools=None)
+
+class Role(StrEnum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
 class AiModel:
     def __init__(self, provider: Provider = Provider.OPENAI, model: str | None = None) -> None:
         
@@ -68,12 +83,28 @@ class AiModel:
             api_key=api_key
         )
 
-    def chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> str:
+    def generic_chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> ChatCompletion:
+        opts = options if options else BASE_OPTION
+        
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            response_format=options.response_format,
-            stream=options.stream
+            response_format=opts.response_format,
+            stream=False,
+            tools=opts.tools
+        )
+
+        return response
+
+    def chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> str:
+        opts = options if options else BASE_OPTION
+        
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            response_format=opts.response_format,
+            stream=opts.stream,
+            tools=opts.tools
         )
 
         normalised_response = self.normalise_response(response)
@@ -81,11 +112,13 @@ class AiModel:
         return normalised_response or ""
 
     def chat_stream(self, messages: list[dict[str, str]], options: ChatOptions | None):
+        opts = options if options else BASE_OPTION
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            response_format=options.response_format,
-            stream=options.stream
+            response_format=opts.response_format,
+            stream=opts.stream,
+            tools=opts.tools
         )
 
         for chunk in response:
