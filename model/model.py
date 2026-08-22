@@ -55,7 +55,7 @@ CONFIGS: dict[Provider, ProviderConfig] = {
     ),
 }
 
-class Model:
+class AiModel:
     def __init__(self, provider: Provider = Provider.OPENAI, model: str | None = None) -> None:
         
         self.provider = provider

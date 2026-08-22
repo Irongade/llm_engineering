@@ -53,4 +53,8 @@ dependencies = [
     "selenium>=4.46.0",
 ]
 [tool.setuptools]
-packages = ["website_summarizer", "brochure_generator", "tokenizer"]
+packages = ["website_summarizer", "brochure_generator", "tokenizer", "model"]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
