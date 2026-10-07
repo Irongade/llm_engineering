@@ -88,7 +88,20 @@ price_function_db = {
 tools = [{"type": "function", "function": price_function}, {"type": "function", "function": price_function_db}]
 
 
-def handle_tool_call(tool_call):
+def handle_tool_calls_and_cities(message):
+    responses = []
+    cities = []
+
+    for tool_call in message.tool_calls:
+        response, city = handle_tool_call_and_city(tool_call)
+        responses.append(response)
+        cities.append(city)
+
+    return responses, cities
+
+def handle_tool_call_and_city(tool_call):
+    city = None
+
     if tool_call.function.name == "get_ticket_price":
         args = json.loads(tool_call.function.arguments)
         city = args.get('destination_city')
@@ -110,16 +123,7 @@ def handle_tool_call(tool_call):
             "tool_call_id": tool_call.id
         }
 
-    return response
-
-def handle_tool_calls(message):
-    responses = []
-
-    for tool_call in message.tool_calls:
-        response = handle_tool_call(tool_call)
-        responses.append(response)
-
-    return responses
+    return response, city
 
 # update the DB with the values.
 for city, price in ticket_prices_for_db.items():
@@ -127,21 +131,37 @@ for city, price in ticket_prices_for_db.items():
 
 # END OF TOOLS
 
+def get_image(city: str):
+    prompt = f"An image representing a vacation in {city}, showing tourist spots and everything unique about {city}, in a vibrant pop-art style"
+    return model.image(prompt, options=None)
+
+def get_speech(message: str):
+    return model.audio(message, options=None)
+
 class HistoryItem(TypedDict):
     role: str
     content: str
 
-def chat(message: str, history):
+# for regular chat interface
+# def chat(message: str, history):
+def chat(history):
     prev_history: list[HistoryItem] = [{"role": h["role"], "content": h["content"]} for h in history]
-    messages = [{"role": "system", "content": system_message}] + prev_history + [{"role": "user", "content": message}]
+
+    # for regular chat interface
+    # messages = [{"role": "system", "content": system_message}] + prev_history + [{"role": "user", "content": message}]
+    messages = [{"role": "system", "content": system_message}] + prev_history
+
     
     options = ChatOptions(stream=False, response_format=None, tools=tools)
     response = model.generic_chat(messages=messages, options=options)
     print(response.choices[0])
 
+    cities = []
+    image = None
+
     if response.choices[0].finish_reason == TOOL_CALLS:
         message = response.choices[0].message
-        response = handle_tool_calls(message)
+        response, cities = handle_tool_calls_and_cities(message)
         # add details about tool call then add responses from tool call done locally
         messages.append(message)
         messages = messages + response
@@ -153,7 +173,40 @@ def chat(message: str, history):
     else:
         response = response.choices[0].message.content or ""
 
-    return response
+    # for simple chat interface, anything below is for voice and image generation
+    # return response
+
+    history += [{"role": "assistant", "content": response}]
+    voice = get_speech(response)
+
+    print(cities, "cities")
+    if cities:
+        prompt = f"Generate an image for this city: {cities[0]}"
+        image = get_image(prompt)
+
+    return history, voice, image
 
 
-gr.ChatInterface(fn=chat, type="messages").launch()
+# simple chat interface - chat should return response
+# gr.ChatInterface(fn=chat, type="messages").launch()
+
+def put_message_in_chatbot(message, history):
+    return "", history + [{"role": "user", "content": message}]
+
+
+# UI definition
+
+with gr.Blocks() as ui:
+    with gr.Row():
+        chatbot = gr.Chatbot(height=500, type="messages")
+        image_output = gr.Image(height=500, interactive=False)
+    with gr.Row():
+        audio_output = gr.Audio(autoplay=True)
+    with gr.Row():
+        message = gr.Textbox(label="Chat with our AI Assitant:")
+
+    message.submit(put_message_in_chatbot, inputs=[message, chatbot], outputs=[message, chatbot]).then(
+        chat, inputs=chatbot, outputs=[chatbot, audio_output, image_output]
+    )
+
+ui.launch()

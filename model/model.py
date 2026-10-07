@@ -4,6 +4,9 @@ from attr import dataclass
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import base64
+from io import BytesIO
+from PIL import Image
 
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.chat.completion_create_params import ResponseFormat
@@ -34,6 +37,17 @@ class ChatOptions:
     stream: bool
     tools: list[Tool] | None
 
+@dataclass(frozen=True)
+class ImageOptions:
+    model: str | None
+    size: str | None
+    number_of_images: int | None
+
+@dataclass(frozen=True)
+class AudioOptions:
+    model: str | None
+    voice: str | None
+
 CONFIGS: dict[Provider, ProviderConfig] = {
     Provider.OPENAI: ProviderConfig(
         base_url=None,
@@ -62,7 +76,10 @@ CONFIGS: dict[Provider, ProviderConfig] = {
     ),
 }
 
-BASE_OPTION = ChatOptions(stream=False, response_format=None, tools=None)
+BASE_CHAT_OPTION = ChatOptions(stream=False, response_format=None, tools=None)
+BASE_IMAGE_OPTION = ImageOptions(model="gpt-image-1-mini", size="1024x1024", number_of_images=1)
+BASE_AUDIO_OPTION = AudioOptions(model="gpt-4o-mini-tts", voice="onyx")
+
 
 class Role(StrEnum):
     SYSTEM = "system"
@@ -84,7 +101,7 @@ class AiModel:
         )
 
     def generic_chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> ChatCompletion:
-        opts = options if options else BASE_OPTION
+        opts = options if options else BASE_CHAT_OPTION
         
         response = self.client.chat.completions.create(
             model=self.model,
@@ -97,7 +114,7 @@ class AiModel:
         return response
 
     def chat(self, messages: list[dict[str, str]], options: ChatOptions | None) -> str:
-        opts = options if options else BASE_OPTION
+        opts = options if options else BASE_CHAT_OPTION
         
         response = self.client.chat.completions.create(
             model=self.model,
@@ -112,7 +129,7 @@ class AiModel:
         return normalised_response or ""
 
     def chat_stream(self, messages: list[dict[str, str]], options: ChatOptions | None):
-        opts = options if options else BASE_OPTION
+        opts = options if options else BASE_CHAT_OPTION
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -125,6 +142,34 @@ class AiModel:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content or ""
 
+
+    def image(self, prompt:str, options: ImageOptions | None):
+
+        opts = options if options else BASE_IMAGE_OPTION
+
+        response = self.client.images.generate(
+            model=opts.model,
+            prompt=prompt,
+            size=opts.size,
+            n=opts.number_of_images
+        )
+
+        response = self.normalise_image_response(response)
+
+        image_data = base64.b64decode(response)
+        return Image.open(BytesIO(image_data))
+
+    def audio(self, message:str, options: AudioOptions | None):
+        opts = options if options else BASE_AUDIO_OPTION
+
+        response = self.client.audio.speech.create(
+            model=opts.model,
+            input=message,
+            voice=opts.voice
+        )
+
+        return response.content
+
     def normalise_response(self, response) -> str:
         match self.provider:
             case Provider.OLLAMA:
@@ -135,3 +180,9 @@ class AiModel:
                 return text.removeprefix("```markdown").removesuffix("```").strip()
             case _:
                 return response.choices[0].message.content
+        
+    def normalise_image_response(self, response) -> str:
+         match self.provider:
+            case _:
+                return response.data[0].b64_json
+
